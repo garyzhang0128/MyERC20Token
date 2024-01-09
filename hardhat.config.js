@@ -4,6 +4,11 @@ require('dotenv').config();
 // Go to https://alchemy.com, sign up, create a new App in
 // its dashboard, and replace "KEY" with its key
 const accounts = [`0x${process.env.MAINNET_PRIVATE_KEY}`];
+
+// const accounts = {
+//   mnemonic: process.env.MNEMONIC || "test test test test test test test test test test test junk",
+// };
+
 // Replace this private key with your Sepolia account private key
 // To export your private key from Coinbase Wallet, go to
 // Settings > Developer Settings > Show private key
