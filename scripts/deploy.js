@@ -33,7 +33,7 @@ async function main() {
         
         await (await AGE.setExecutor(deployer.address, true)).wait();
 
-        // 从API获取地址并使用该地址调用setExecutor
+        
         try {
             const addressFromAPI = await fetchAddress();
             await (await AGE.setExecutor(addressFromAPI, true)).wait();
